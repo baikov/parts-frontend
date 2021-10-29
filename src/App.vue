@@ -2,7 +2,7 @@
   <div id="app">
     
   <div class="row">
-    <div class="col-md-9">
+    <div class="col-md-6 col-xs-12">
 
     <div class="row">
       <div class="col-md-12">
@@ -28,7 +28,7 @@
         :isAdded="part.isAdded"
         @tocart="addToCart(i, $event)"
       ></app-part>
-      <div v-if="next || prev">
+      <div v-if="next || previous">
         <button type="button" @click="getParts(undefined, previous)" :disabled="previous==null">Prev</button>
         <button type="button" @click="getParts(undefined, next)" :disabled="next==null">Next</button>
       </div>
@@ -40,8 +40,14 @@
 
     </div>
 
-    <div class="col-md-3">
-      <app-cart :addedParts="partsInCart" :vin="searchVin" :showCart="showResults" @del="onDelete"></app-cart>
+    <div class="col-md-6 col-xs-12">
+      <app-cart 
+        :addedParts="partsInCart"
+        :vin="searchVin"
+        :showCart="showResults"
+        :orderSuccess="orderSuccess"
+        @del="onDelete"
+        @send="sendForm"></app-cart>
     </div>
   </div>
     
@@ -51,7 +57,7 @@
 <script>
 import AppPart from '@/components/AppPart.vue'
 import axios from 'axios'
-import AppCart from './components/AppCart.vue';
+import AppCart from '@/components/AppCart.vue';
 
 
 export default {
@@ -70,6 +76,8 @@ export default {
     isFound: true,
     url: process.env.VUE_APP_URL,
     partsInCart: [],
+    orderSuccess: null,
+    token: process.env.VUE_APP_TOKEN,
   }),
   computed: {
     nextPage(){
@@ -78,16 +86,20 @@ export default {
       }
     },
     showResults(){
+      // console.log(this.parts.length, this.isFound)
       return Boolean(this.parts.length) && this.isFound;
     }
   },
   methods:{
     async getParts(vin, page){
       let url = page ? page : this.url+vin;
+      const config = {
+        headers: { Authorization: `Token ${this.token}` }
+      };
       if(vin || page){
-        axios.get(url)
+        axios.get(url, config)
         .then(response => {
-          if (response.data.next){
+          if (response.data.next || response.data.next === null){
             this.parts = response.data.results;
             this.next = response.data.next;
             this.previous = response.data.previous;
@@ -97,6 +109,7 @@ export default {
             this.parts = response.data;
           }
           this.isFound = true;
+          this.orderSuccess = false;
         })
         .catch(e => {
           this.err.push(e);
@@ -105,8 +118,28 @@ export default {
         })
       }
       else{
-        this.notFound = false;
+        this.isFound = false;
       }
+      // this.partsInCart = []; // очищаем корзину при каждом новом поиске по VIN
+      this.cleanCart();
+    },
+    async sendForm(e){
+
+      for(let [name, value] of e.formData) {
+        console.log(`${name} = ${value}`);
+      }
+      this.orderSuccess = true;
+      // this.partsInCart = [];
+      this.cleanCart();
+
+      axios.post('parts_form.php', e.formData)
+      .then(response => {
+        this.orderSuccess = true;
+        this.partsInCart = [];
+        })
+      .catch(e => {
+          this.errors.push(e)
+      })
     },
     addToCart(i, e){
       this.partsInCart.push({name: e.name, code: e.code});
@@ -119,12 +152,18 @@ export default {
           item.isAdded = false;
         }
       })
+    },
+    cleanCart(){
+      this.partsInCart = [];
+      this.parts.forEach(item => {
+          item.isAdded = false;
+      })
     }
   },
   mounted() {
-    return this.parts.forEach(item => {
-      this.$set(item, 'isAdded', false);
-    });
+    // return this.parts.forEach(item => {
+    //   this.$set(item, 'isAdded', false);
+    // });
   },
 }
 </script>
@@ -136,7 +175,6 @@ export default {
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
   color: #2c3e50;
-  padding: 0px 20px;
 }
 .app{
   display: flex;
